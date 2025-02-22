@@ -64,22 +64,41 @@ async def handle_forwarded_message(client, message: Message):
     else:
         await message.reply_text("⚠️ Unsupported chat type.")
 
-# 🔹 Handle Manual Channel/Group ID Submission
-@Client.on_message(filters.text & filters.private)
-async def receive_channel_or_group(client, message):
+
+# ✅ Handle Forwarded or Sent Channel/Group Username or ID
+@Client.on_message(filters.private)
+async def receive_channel_or_group(client, message: Message):
     user_id = message.from_user.id
 
-    if user_id in user_data:
-        step = user_data[user_id]["step"]
+    if user_id in client.user_data:
+        step = client.user_data[user_id]["step"]
 
         if step == "waiting_for_channel":
-            # ✅ Save to database
-            save_channel(message.text, "Unknown", message.text)
-            await message.reply_text(f"✅ **Channel Added:**\n**ID/Username:** `{message.text}`")
-            del user_data[user_id]  # Remove user state
+            if message.forward_from_chat:
+                channel_id = message.forward_from_chat.id
+                channel_name = message.forward_from_chat.title
+                username = message.forward_from_chat.username or f"ID: {channel_id}"
+            else:
+                channel_id = message.text
+                channel_name = "Unknown"
+                username = message.text  
+
+            # ✅ Save & Confirm
+            success_message = save_channel(channel_id, channel_name, username)  
+            await message.reply_text(f"🎉 **Success!**\n\n{success_message}")
+            del client.user_data[user_id]
 
         elif step == "waiting_for_group":
-            # ✅ Save to database
-            save_group(message.text, "Unknown", message.text)
-            await message.reply_text(f"✅ **Group Added:**\n**ID/Username:** `{message.text}`")
-            del user_data[user_id]  # Remove user state
+            if message.forward_from_chat:
+                group_id = message.forward_from_chat.id
+                group_name = message.forward_from_chat.title
+                username = message.forward_from_chat.username or f"ID: {group_id}"
+            else:
+                group_id = message.text
+                group_name = "Unknown"
+                username = message.text  
+
+            # ✅ Save & Confirm
+            success_message = save_group(group_id, group_name, username)  
+            await message.reply_text(f"🎉 **Success!**\n\n{success_message}")
+            del client.user_data[user_id]
