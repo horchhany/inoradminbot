@@ -1,6 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove
-from bot.handlers.handler import post  # Import function
+from bot.handlers.post import post  # Import function
 
 @Client.on_message(filters.command("start") & filters.private)
 async def start(client, message):

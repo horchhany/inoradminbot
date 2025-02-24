@@ -1,52 +1,87 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from bot.config import CHANNEL_ID, GROUP_ID
+from bot.utils.database import get_channel_group
 
 
 # Store user post data
 user_posts = {}
  
-@Client.on_callback_query(filters.regex("select_(channel|group)"))
+async def post(client, message):
+    # 🔹 Fetch stored channels and groups
+    channel_id, channel_name, group_id, group_name = get_channel_group()
+
+    if channel_id and group_id:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"📢 {channel_name}", callback_data=f"select_channel:{channel_id}"),
+             InlineKeyboardButton(f"👥 {group_name}", callback_data=f"select_group:{group_id}")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_post")]
+        ])
+        await message.reply_text("📢 Select where to post:", reply_markup=keyboard)
+    else:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Add Channel", callback_data="add_channel"),
+             InlineKeyboardButton("➕ Add Group", callback_data="add_group")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_post")]
+        ])
+        await message.reply_text(
+            "Adding Channel | Group\n\n"
+            "To add, follow these steps:\n"
+            "1. Add **'BOT'** as an admin in your channel/group.\n"
+            "2. Forward a message from the channel/group, or send its username/ID.",
+            reply_markup=keyboard
+        )
+
 async def select_destination(client, query: CallbackQuery):
-    """User selects Channel or Group for posting."""
     user_id = query.from_user.id
     destination = "channel" if "channel" in query.data else "group"
     
-    user_posts[user_id] = {
-        "destination": destination,
-        "messages": []  # Store multiple messages
-    }
+    # Ensure user_posts has a valid structure
+    if user_id not in user_posts:
+        user_posts[user_id] = {"messages": []}
 
-    await query.message.edit_text(
-        "📩 Send me one or multiple messages you want to include in the post.\n"
-        "It can be anything — text, photo, video, even a sticker.\n\n"
-        "When you're done, click '✅ Send Now'.",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Send Now", callback_data="send_post")],
-            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_post")]
-        ])
-    )
+    user_posts[user_id]["destination"] = destination  # Store choice
+
 
 @Client.on_message(filters.private & (filters.text | filters.photo | filters.video | filters.sticker))
 async def collect_post_content(client, message):
-    """Collects multiple messages (text, photo, video, stickers)."""
     user_id = message.from_user.id
     
     if user_id in user_posts and "destination" in user_posts[user_id]:
         user_posts[user_id]["messages"].append(message)
 
-        await message.reply_text("✅ Added! Send more or click 'Send Now'.")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Send Now", callback_data="send_post")],
+            [InlineKeyboardButton("🗑 Remove Last", callback_data="remove_last_message")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_post")]
+        ])
 
-@Client.on_callback_query(filters.regex("send_post"))
+        await message.reply_text("✅ Added! Send more or click 'Send Now'.", reply_markup=keyboard)
+
+@Client.on_callback_query(filters.regex("remove_last_message"))
+async def remove_last_message(client, query: CallbackQuery):
+    """Removes the last added message before posting."""
+    user_id = query.from_user.id
+
+    if user_id in user_posts and user_posts[user_id]["messages"]:
+        user_posts[user_id]["messages"].pop()  # Remove last message
+        await query.answer("🗑 Removed the last message!", show_alert=True)
+    else:
+        await query.answer("⚠️ No messages to remove!", show_alert=True)
+
 async def send_post(client, query: CallbackQuery):
-    """Sends the collected post to the selected destination (Channel or Group)."""
     user_id = query.from_user.id
 
     if user_id not in user_posts or not user_posts[user_id]["messages"]:
         await query.answer("⚠️ No messages to send!", show_alert=True)
         return
 
-    destination_id = CHANNEL_ID if user_posts[user_id]["destination"] == "channel" else GROUP_ID
+    # Fetch the correct destination from the database
+    channel_id, _, group_id, _ = get_channel_group()
+    destination_id = channel_id if user_posts[user_id]["destination"] == "channel" else group_id
+
+    if not destination_id:
+        await query.answer("⚠️ No valid destination found!", show_alert=True)
+        return
 
     # Send all collected messages
     for msg in user_posts[user_id]["messages"]:
@@ -61,6 +96,7 @@ async def send_post(client, query: CallbackQuery):
 
     await query.message.edit_text("✅ Post sent successfully!")
     del user_posts[user_id]  # Clear data after sending
+
 
 @Client.on_callback_query(filters.regex("cancel_post"))
 async def cancel_post(client, query: CallbackQuery):

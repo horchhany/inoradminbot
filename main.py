@@ -11,15 +11,20 @@ init_db()
 
 # ✅ Create Bot Client & Add `user_data` Dictionary
 app = Client("telegram_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-app.user_data = {}  # ✅ Add this line to store user steps
+app.user_data = {}  # ✅ Store user states
 
 # ✅ Register Handlers
 app.add_handler(MessageHandler(start, filters.command("start") & filters.private))
+
+# Add more handlers as needed...
 app.add_handler(MessageHandler(handle_buttons, filters.text & filters.private))
 app.add_handler(CallbackQueryHandler(add_channel, filters.regex("^add_channel$")))
 app.add_handler(CallbackQueryHandler(add_group, filters.regex("^add_group$")))
-app.add_handler(MessageHandler(receive_channel_or_group, filters.text & filters.private))
-app.add_handler(MessageHandler(handle_forwarded_message, filters.forwarded & filters.private))
+
+# Add more handlers as needed...
+app.add_handler(MessageHandler(receive_channel_or_group, filters.private & (filters.text | filters.forwarded)))
+app.add_handler(MessageHandler(handle_forwarded_message, filters.forwarded& filters.private))
+
 
 async def main():
     print("✅ Bot started...")
