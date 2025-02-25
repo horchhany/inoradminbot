@@ -24,80 +24,73 @@ async def add_group(client, query: CallbackQuery):
 # ✅ Handle Forwarded or Sent Channel/Group Username or ID
 @Client.on_message(filters.private & (filters.text | filters.forwarded))
 async def receive_channel_or_group(client, message: Message):
+ 
     user_id = message.from_user.id
+    text = message.text.strip() if message.text else None
 
-    print(f"🔹 Received Message: {message.text or 'Forwarded Message'} from {user_id}")
+    print(f"🟢 Debug: Message received from {user_id}: {text or 'Forwarded Message'}")
+
+    # ✅ Ensure user_data exists
+    if not hasattr(client, "user_data"):
+        client.user_data = {}
 
     if user_id not in client.user_data:
-        print("⚠️ User state not found! Maybe user_data is not shared?")
+        print("⚠️ User state not found!")
         await message.reply_text("⚠️ Please click 'Add Channel' or 'Add Group' first!")
         return
 
     step = client.user_data[user_id]["step"]
     print(f"🔍 User Step Detected: {step}")  
 
-    if message.forward_from_chat:
-        chat = message.forward_from_chat
-        chat_id = chat.id
-        chat_name = chat.title
-        username = f"@{chat.username}" if chat.username else f"ID: {chat_id}"
-
-        print(f"📢 Detected Forwarded Chat - ID: {chat_id}, Name: {chat_name}, Username: {username}")
-
-        if step == "waiting_for_channel" and chat.type == "channel":
-            save_channel(chat_id, chat_name, username)
-            await message.reply_text(f"✅ Channel Added: {username}")
-
-        elif step == "waiting_for_group" and chat.type in ["supergroup", "group"]:
-            save_group(chat_id, chat_name, username)
-            await message.reply_text(f"✅ Group Added: {username}")
-
-        else:
-            await message.reply_text("⚠️ Unsupported chat type. Please forward a message from a **channel** or **group**.")
-
-        del client.user_data[user_id]  # ✅ Remove user state after saving
-        return
-
-    # If user manually types username or ID
-    text = message.text.strip()
     if step == "waiting_for_channel":
-        if text.startswith("@"):  # Username
-            chat_id = text
-            chat_name = "Unknown"
-            username = text
-        elif text.isdigit():  # Channel ID
-            chat_id = int(text)
-            chat_name = "Unknown"
-            username = f"ID: {chat_id}"
-        else:
-            print("⚠️ Invalid channel format!")
-            await message.reply_text("⚠️ Invalid username or ID. Please send a valid **@username** or numeric **ID**.")
-            return
+        print("📢 Processing as Channel...")
+        if message.forward_from_chat:  # ✅ Forwarded from a channel
+            channel_id = message.forward_from_chat.id
+            channel_name = message.forward_from_chat.title
+            username = f"@{message.forward_from_chat.username}" if message.forward_from_chat.username else f"ID: {channel_id}"
+        else:  # ✅ Manually entered username or ID
+            if text.startswith("@"):  # Username
+                channel_id = text
+                channel_name = "Unknown"
+                username = text
+            elif text.isdigit():  # Channel ID
+                channel_id = int(text)
+                channel_name = "Unknown"
+                username = f"ID: {channel_id}"
+            else:
+                print("❌ Invalid username or ID!")
+                await message.reply_text("⚠️ Invalid username or ID. Please send a valid **@username** or numeric **ID**.")
+                return
 
-        print(f"📢 Manually Entered Channel - ID: {chat_id}, Username: {username}")
-        save_channel(chat_id, chat_name, username)
+        print(f"📢 Saving Channel: {channel_id}, {channel_name}, {username}")
+        save_channel(channel_id, channel_name, username)
         await message.reply_text(f"✅ Channel Added: {username}")
-        del client.user_data[user_id]
+        del client.user_data[user_id]  
 
     elif step == "waiting_for_group":
-        if text.startswith("@"):  # Username
-            chat_id = text
-            chat_name = "Unknown"
-            username = text
-        elif text.isdigit():  # Group ID
-            chat_id = int(text)
-            chat_name = "Unknown"
-            username = f"ID: {chat_id}"
-        else:
-            print("⚠️ Invalid group format!")
-            await message.reply_text("⚠️ Invalid username or ID. Please send a valid **@username** or numeric **ID**.")
-            return
+        print("👥 Processing as Group...")
+        if message.forward_from_chat:  # ✅ Forwarded from a group
+            group_id = message.forward_from_chat.id
+            group_name = message.forward_from_chat.title
+            username = f"@{message.forward_from_chat.username}" if message.forward_from_chat.username else f"ID: {group_id}"
+        else:  # ✅ Manually entered username or ID
+            if text.startswith("@"):  # Username
+                group_id = text
+                group_name = "Unknown"
+                username = text
+            elif text.isdigit():  # Group ID
+                group_id = int(text)
+                group_name = "Unknown"
+                username = f"ID: {group_id}"
+            else:
+                print("❌ Invalid username or ID!")
+                await message.reply_text("⚠️ Invalid username or ID. Please send a valid **@username** or numeric **ID**.")
+                return
 
-        print(f"👥 Manually Entered Group - ID: {chat_id}, Username: {username}")
-        save_group(chat_id, chat_name, username)
+        print(f"👥 Saving Group: {group_id}, {group_name}, {username}")
+        save_group(group_id, group_name, username)
         await message.reply_text(f"✅ Group Added: {username}")
         del client.user_data[user_id]
-
 
 # 🔹 Handle Forwarded Messages (Auto-Detect Channel or Group)
 @Client.on_message(filters.forwarded & filters.private)
